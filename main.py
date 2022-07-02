@@ -1,5 +1,3 @@
-import random
-
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
@@ -90,18 +88,12 @@ class MainLayout(FloatLayout):
             always_release = True,
             background_normal = 'assets/play_normal.png',
             background_down = 'assets/play_down.png',
+            background_disabled_normal = 'assets/play_normal.png',
             opacity = 0.,
             border = (0, 0, 0, 0)
         )
-        self._pauseBtn = Button(
-            size_hint = (0.0, 0.0),
-            pos_hint = {'right': 0.5, 'center_y': 0.3},
-            always_release = True,
-            background_normal = 'assets/play_normal.png',
-            background_down = 'assets/play_down.png',
-            opacity = 0.,
-            border = (0, 0, 0, 0)
-        )
+        self._playBtn.bind(on_release = lambda x : self.play_audio())
+        self._playing = False
         self._confirmBtn = Button(
             size_hint = (0.0, 0.0),
             pos_hint = {'center_x': 0.5, 'center_y': 0.3},
@@ -120,9 +112,9 @@ class MainLayout(FloatLayout):
             opacity = 0.,
             border = (0, 0, 0, 0)
         )
+        
         self.add_widget(self._progressSlider)
         self.add_widget(self._playBtn)
-        self.add_widget(self._pauseBtn)
         self.add_widget(self._confirmBtn)
         self.add_widget(self._cancelBtn)
         
@@ -154,8 +146,8 @@ class MainLayout(FloatLayout):
     # def simulate_audio(self):
     #     self.targetGlow = random.randint(100, 200) / 100
         
-    def process_audio(self, in_data, frame_count, time_info, flag):
-        audio_data = np.fromstring(in_data, dtype = np.float32)
+    def process_audio(self, in_data, frame_count, time_info, flag):        
+        audio_data = np.frombuffer(in_data, dtype = np.float32)
         
         db = float(dB(rms(audio_data)))
         self.minimum_db = db if db < self.minimum_db else self.minimum_db
@@ -166,6 +158,16 @@ class MainLayout(FloatLayout):
             self.targetGlow = normalized + 1.0
         
         return in_data, pyaudio.paContinue
+        
+    def play_audio(self):
+        self._playing = not self._playing
+        if self._playing:
+            self._playBtn.background_normal = 'assets/pause_normal.png'
+            self._playBtn.background_down = 'assets/pause_down.png'
+        else:
+            self._playBtn.background_normal = 'assets/play_normal.png'
+            self._playBtn.background_down = 'assets/play_down.png'
+        
         
     def start_record(self):
         # self.glowEvent = Clock.schedule_interval(lambda x : self.simulate_audio(), 0.1)
@@ -202,17 +204,12 @@ class MainLayout(FloatLayout):
                           opacity = 1.0,
                           pos_hint = {'right': 0.245, 'center_y': 0.35},
                           duration = 0.5, transition = AnimationTransition.in_out_sine)
-        anim5 = Animation(size_hint = ((0.05 * Window.height) / Window.width, 0.05),
-                          opacity = 0.0,
-                          pos_hint = {'right': 0.245, 'center_y': 0.35},
-                          duration = 0.5, transition = AnimationTransition.in_out_sine)
         anim1.start(self._cancelBtn)
         anim2.start(self._confirmBtn)
         anim3.start(self._progressSlider)
         anim4.start(self._playBtn)
-        anim5.start(self._pauseBtn)
     
-    def stop_record(self):
+    def stop_record(self):        
         # Clock.unschedule(self.glowEvent)
         # self.glowEvent = None
         self.stream.stop_stream()
@@ -230,6 +227,8 @@ class MainLayout(FloatLayout):
         self._confirmBtn.size_hint_x = self._confirmBtn.height / window.width
         # Refresh button for cancel
         self._cancelBtn.size_hint_x = self._cancelBtn.height / window.width
+        # Refresh button for play
+        self._playBtn.size_hint_x = self._playBtn.height / window.width
         
         # Refresh Text to be recorded
         self._recordText.size = (0.9 * window.width, 0.6 * window.height)
