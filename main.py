@@ -113,6 +113,7 @@ class MainLayout(FloatLayout):
             opacity = 0.,
             border = (0, 0, 0, 0)
         )
+        self._cancelBtn.bind(on_release = lambda x : self.delete_audio())
         
         self.add_widget(self._progressSlider)
         self.add_widget(self._playBtn)
@@ -168,11 +169,59 @@ class MainLayout(FloatLayout):
             return self.chunks[c], pyaudio.paContinue
         else:
             self._progressSlider.value += 1
+            self._playBtn.background_normal = 'assets/play_normal.png'
+            self._playBtn.background_down = 'assets/play_down.png'
+            self._playing = False
             return self.chunks[c], pyaudio.paComplete
+        
+    def show_recordBtn(self, animation, widget):
+        self.finishedAnim += 1
+        if self.finishedAnim >= 4:
+            anim = Animation(size_hint = ((0.3 * Window.height ) / Window.width, 0.3),
+                             opacity = 1.0,
+                             duration = 0.5, transition = AnimationTransition.in_out_sine)
+            anim.start(self._recordBtn)
+        
+    def delete_audio(self):
+        if self._playing:
+            self._playing = False
+            self._playBtn.background_normal = 'assets/play_normal.png'
+            self._playBtn.background_down = 'assets/play_down.png'
+            self.stream.stop_stream()
+            self.stream.close()
+            self.pyaudio.terminate()
+        anim1 = Animation(size_hint = (0.0, 0.0),
+                          opacity = 0.0,
+                          pos_hint = {'center_x': 0.5, 'center_y': 0.3},
+                          duration = 0.5, transition = AnimationTransition.in_out_sine)
+        anim2 = Animation(size_hint = (0.0, 0.0),
+                          opacity = 0.0,
+                          pos_hint = {'center_x': 0.5, 'center_y': 0.3},
+                          duration = 0.5, transition = AnimationTransition.in_out_sine)
+        anim3 = Animation(size_hint = (0.0, 0.0),
+                          opacity = 0.0,
+                          pos_hint = {'center_x': 0.5, 'center_y': 0.3},
+                          duration = 0.5, transition = AnimationTransition.in_out_sine)
+        anim4 = Animation(size_hint = (0.0, 0.0),
+                          opacity = 0.0,
+                          pos_hint = {'right': 0.5, 'center_y': 0.3},
+                          duration = 0.5, transition = AnimationTransition.in_out_sine)
+        self.finishedAnim = 0
+        anim1.bind(on_complete = self.show_recordBtn)
+        anim2.bind(on_complete = self.show_recordBtn)
+        anim3.bind(on_complete = self.show_recordBtn)
+        anim4.bind(on_complete = self.show_recordBtn)
+        
+        anim1.start(self._cancelBtn)
+        anim2.start(self._confirmBtn)
+        anim3.start(self._progressSlider)
+        anim4.start(self._playBtn)
         
     def play_audio(self):
         self._playing = not self._playing
         if self._playing:
+            if self._progressSlider.value >= len(self.chunks):
+                self._progressSlider.value = 0
             self._playBtn.background_normal = 'assets/pause_normal.png'
             self._playBtn.background_down = 'assets/pause_down.png'
             self.pyaudio = pyaudio.PyAudio()
@@ -188,6 +237,9 @@ class MainLayout(FloatLayout):
         else:
             self._playBtn.background_normal = 'assets/play_normal.png'
             self._playBtn.background_down = 'assets/play_down.png'
+            self.stream.stop_stream()
+            self.stream.close()
+            self.pyaudio.terminate()
         
         
     def start_record(self):
