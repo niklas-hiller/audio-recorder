@@ -146,7 +146,8 @@ class MainLayout(FloatLayout):
     # def simulate_audio(self):
     #     self.targetGlow = random.randint(100, 200) / 100
         
-    def process_audio(self, in_data, frame_count, time_info, flag):        
+    def process_audio_input(self, in_data, frame_count, time_info, flag):
+        self.chunks.append(in_data)   
         audio_data = np.frombuffer(in_data, dtype = np.float32)
         
         db = float(dB(rms(audio_data)))
@@ -158,12 +159,31 @@ class MainLayout(FloatLayout):
             self.targetGlow = normalized + 1.0
         
         return in_data, pyaudio.paContinue
+    
+    def process_audio_output(self, in_data, frame_count, time_info, flag):
+        c = int(self._progressSlider.value)
+        if c + 1 < len(self.chunks):
+            self._progressSlider.value += 1
+            return self.chunks[c], pyaudio.paContinue
+        else:
+            self._progressSlider.value += 1
+            return self.chunks[c], pyaudio.paComplete
         
     def play_audio(self):
         self._playing = not self._playing
         if self._playing:
             self._playBtn.background_normal = 'assets/pause_normal.png'
             self._playBtn.background_down = 'assets/pause_down.png'
+            self.pyaudio = pyaudio.PyAudio()
+            sample_rate = int(self.pyaudio.get_default_output_device_info()['defaultSampleRate'])
+            device = self.pyaudio.get_default_output_device_info()['index']
+            self.stream = self.pyaudio.open(format = pyaudio.paFloat32,
+                                            output_device_index = device,
+                                            channels = 1,
+                                            rate = sample_rate,
+                                            output = True,
+                                            input = False,
+                                            stream_callback = self.process_audio_output)
         else:
             self._playBtn.background_normal = 'assets/play_normal.png'
             self._playBtn.background_down = 'assets/play_down.png'
@@ -173,6 +193,7 @@ class MainLayout(FloatLayout):
         # self.glowEvent = Clock.schedule_interval(lambda x : self.simulate_audio(), 0.1)
         self.minimum_db =  10000    # just some high value
         self.maximum_db = -10000    # just some small value
+        self.chunks = []
         
         self.pyaudio = pyaudio.PyAudio()
         sample_rate = int(self.pyaudio.get_default_input_device_info()['defaultSampleRate'])
@@ -183,7 +204,7 @@ class MainLayout(FloatLayout):
                                         rate = sample_rate,
                                         output = False,
                                         input = True,
-                                        stream_callback = self.process_audio)
+                                        stream_callback = self.process_audio_input)
         self.stream.start_stream()
     
     def hide_recordBtn(self, animation, widget):
@@ -215,6 +236,10 @@ class MainLayout(FloatLayout):
         self.stream.stop_stream()
         self.stream.close()
         self.pyaudio.terminate()
+        
+        self._progressSlider.max = len(self.chunks) - 1
+        self._progressSlider.value = 0
+        
         self.targetGlow = 1.0
         anim = Animation(size_hint = (0.0, 0.0), duration = 0.5, opacity = 0.0, transition = AnimationTransition.in_out_sine)
         anim.bind(on_complete = self.hide_recordBtn)
