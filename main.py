@@ -80,7 +80,8 @@ class MainLayout(FloatLayout):
             pos_hint = {'center_x': 0.5, 'center_y': 0.3},
             value = 0.,
             opacity = 0.,
-            max = 1.0
+            max = 1.0,
+            step = 1
         )
         self._playBtn = Button(
             size_hint = (0.0, 0.0),
