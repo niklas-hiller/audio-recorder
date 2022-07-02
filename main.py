@@ -1,5 +1,5 @@
 import random
-from time import sleep
+
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
@@ -8,7 +8,20 @@ from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.clock import Clock
 
+import pyaudio
+import numpy as np
+
+def rms(arr):
+    """ calculates the rms power of an array """
+    return np.sqrt(np.mean(np.power(arr, 2)))
+
+def dB(rms): 
+    """ calculates the logarithmic dB value of a rms """
+    return 20 * np.log10(rms)
+
 class MainLayout(FloatLayout):
+    
+    INTENSITY_DECIBEL_RANGE = (20, 100)
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -75,26 +88,56 @@ class MainLayout(FloatLayout):
             self.currentGlow -= 0.03
         elif self.targetGlow > self.currentGlow:
             self.currentGlow += 0.03
+            
+        self._recordGlow.size_hint_y = round(0.25 * self.currentGlow, 2)
+        self._recordGlow.size_hint_x = round((0.25 * self.currentGlow * Window.height) / Window.width, 2)
         
-        self._recordGlow.size_hint_y = 0.25 * self.currentGlow
-        self._recordGlow.size_hint_x = (0.25 * self.currentGlow * Window.height) / Window.width
+    # def simulate_audio(self):
+    #     self.targetGlow = random.randint(100, 200) / 100
         
-    def simulate_audio(self):
-        self.targetGlow = random.randint(100, 200) / 100
+    def process_audio(self, in_data, frame_count, time_info, flag):
+        audio_data = np.fromstring(in_data, dtype = np.float32)
+        
+        db = float(dB(rms(audio_data)))
+        self.minimum_db = db if db < self.minimum_db else self.minimum_db
+        self.maximum_db = db if db > self.maximum_db else self.maximum_db
+        
+        if (self.maximum_db - self.minimum_db) != 0:
+            normalized = round((db - self.minimum_db) / (self.maximum_db - self.minimum_db), 2)
+            self.targetGlow = normalized + 1.0
+        
+        return in_data, pyaudio.paContinue
         
     def start_record(self):
-        self.glowEvent = Clock.schedule_interval(lambda x : self.simulate_audio(), 0.1)
+        # self.glowEvent = Clock.schedule_interval(lambda x : self.simulate_audio(), 0.1)
+        self.minimum_db =  10000    # just some high value
+        self.maximum_db = -10000    # just some small value
+        
+        self.pyaudio = pyaudio.PyAudio()
+        sample_rate = int(self.pyaudio.get_default_input_device_info()['defaultSampleRate'])
+        device = self.pyaudio.get_default_input_device_info()['index']
+        self.stream = self.pyaudio.open(format = pyaudio.paFloat32,
+                                        input_device_index = device,
+                                        channels = 1,
+                                        rate = sample_rate,
+                                        output = False,
+                                        input = True,
+                                        stream_callback = self.process_audio)
+        self.stream.start_stream()
     
     def stop_record(self):
-        Clock.unschedule(self.glowEvent)
-        self.glowEvent = None
+        # Clock.unschedule(self.glowEvent)
+        # self.glowEvent = None
+        self.stream.stop_stream()
+        self.stream.close()
+        self.pyaudio.terminate()
         self.targetGlow = 1.0
     
     def update(self, window):
         # Refresh button for recording
         self._recordBtn.size_hint_x = self._recordBtn.height / window.width
         
-        # Refresh glow effect that indicates volume
+        # Refresh glow effect that indicates dB
         self._recordGlow.size_hint_x = self._recordGlow.height / window.width
         
         # Refresh Text to be recorded
