@@ -129,6 +129,9 @@ class MainLayout(FloatLayout):
         Window.bind(on_maximize = self.on_maximize)
         Window.bind(on_restore = self.on_restore)
         
+        Clock.schedule_once(lambda x : self.update(), 0.1)
+        
+        
     def update_intensity(self, dt):
         if abs(self.targetGlow - self.currentGlow) < 0.03:
             self.currentGlow = self.targetGlow
@@ -298,24 +301,24 @@ class MainLayout(FloatLayout):
         anim.bind(on_complete = self.hide_recordBtn)
         anim.start(self._recordBtn)
     
-    def update(self, window):
+    def update(self):
         # Refresh button for recording
-        self._recordBtn.size_hint_x = self._recordBtn.height / window.width
+        self._recordBtn.size_hint_x = self._recordBtn.height / Window.width
         # Refresh button for confirm
-        self._confirmBtn.size_hint_x = self._confirmBtn.height / window.width
+        self._confirmBtn.size_hint_x = self._confirmBtn.height / Window.width
         # Refresh button for cancel
-        self._cancelBtn.size_hint_x = self._cancelBtn.height / window.width
+        self._cancelBtn.size_hint_x = self._cancelBtn.height / Window.width
         # Refresh button for play
-        self._playBtn.size_hint_x = self._playBtn.height / window.width
+        self._playBtn.size_hint_x = self._playBtn.height / Window.width
         
         # Refresh Text to be recorded
-        self._recordText.size = (0.9 * window.width, 0.6 * window.height)
+        self._recordText.size = (0.9 * Window.width, 0.6 * Window.height)
         self._recordText.text_size = self._recordText.size
         self._recordText.font_size = (self._recordText.height * 0.05)
 
         # Refresh Background
-        new_size_x = (window.height * self._background.image_ratio) / window.width
-        new_size_y = (window.width * self._background.image_ratio) / window.height
+        new_size_x = (Window.height * self._background.image_ratio) / Window.width
+        new_size_y = (Window.width * self._background.image_ratio) / Window.height
         if new_size_x < 1.0:
             self._background.size_hint_x = 1.0
             self._background.size_hint_y = new_size_y
@@ -324,19 +327,19 @@ class MainLayout(FloatLayout):
             self._background.size_hint_y = 1.0
     
     def on_resize(self, window, width, height):
-        self.update(window)
+        self.update()
         
     def on_rotate(self, window):
-        self.update(window)
+        self.update()
         
     def on_show(self, window):
-        self.update(window)
+        self.update()
         
     def on_maximize(self, window):
-        self.update(window)
+        self.update()
         
     def on_restore(self, window):
-        self.update(window)
+        self.update()
         
 class RecorderApp(App):
 
