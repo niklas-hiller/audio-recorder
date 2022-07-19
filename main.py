@@ -8,6 +8,9 @@ from kivy.clock import Clock
 from kivy.animation import Animation, AnimationTransition
 from kivy.uix.slider import Slider
 
+import hashlib
+import csv
+import json
 import pyaudio
 import numpy as np
 
@@ -19,12 +22,38 @@ def dB(rms):
     """ calculates the logarithmic dB value of a rms """
     return 20 * np.log10(rms)
 
-class MainLayout(FloatLayout):
+
+class NO_MORE_TEXT(Exception):
+    pass
+
+class Data:
     
-    INTENSITY_DECIBEL_RANGE = (20, 100)
+    def __init__(self, src = 'texts.json'):
+        self._current = -1
+        with open(src, encoding='utf-8') as f:
+            self._texts = json.load(f)
+        
+    @property
+    def current(self):
+        return self._texts[self._current]
+        
+    def next(self):
+        if self._current + 1 >= len(self._texts): raise NO_MORE_TEXT
+        self._current += 1
+        return self._texts[self._current]
+    
+    # def insert(self, data):
+    #     self._data[self._current] = data
+    #     
+    # def to_csv(self):
+    #     pass
+
+class MainLayout(FloatLayout):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        self._data = None
         
         self._background = Image(
             source = 'assets/background.jpg',
@@ -34,11 +63,7 @@ class MainLayout(FloatLayout):
         self.add_widget(self._background)
 
         self._recordText = Label(
-            text = "Maschinelles Lernen ist ein Oberbegriff für die „künstliche“ Generierung von Wissen aus Erfahrung: "
-                + "Ein künstliches System lernt aus Beispielen und kann diese nach Beendigung der Lernphase verallgemeinern. "
-                + "Dazu bauen Algorithmen beim maschinellen Lernen ein statistisches Modell auf, das auf Trainingsdaten beruht "
-                + "und welches gegen die Testdaten getestet wird. Das heißt, es werden nicht einfach die Beispiele auswendig gelernt "
-                + "(siehe Überanpassung), sondern Muster und Gesetzmäßigkeiten in den Lerndaten erkannt.",
+            text = "",
             size = (0.9 * Window.width, 0.6 * Window.height),
             text_size = (0.9 * Window.width, 0.6 * Window.height),
             size_hint = (None, None),
@@ -104,6 +129,7 @@ class MainLayout(FloatLayout):
             opacity = 0.,
             border = (0, 0, 0, 0)
         )
+        self._confirmBtn.bind(on_release = lambda x : self.save_audio())
         self._cancelBtn = Button(
             size_hint = (0.0, 0.0),
             pos_hint = {'center_x': 0.5, 'center_y': 0.3},
@@ -131,6 +157,23 @@ class MainLayout(FloatLayout):
         
         Clock.schedule_once(lambda x : self.update(), 0.1)
         
+        self.update_text()
+        
+    def show_new_text(self):
+        try:
+            self._recordText.text = self._data.next()
+        except NO_MORE_TEXT as e:
+            self._recordText.text = "Done"
+        anim = Animation(opacity = 1.0)
+        anim.start(self._recordText)
+        
+    def update_text(self):
+        if self._data is None:
+            self._data = Data()
+        anim = Animation(opacity = 0.0)
+        anim.bind(on_complete = lambda x, y : self.show_new_text())
+        anim.start(self._recordText)
+
         
     def update_intensity(self, dt):
         if abs(self.targetGlow - self.currentGlow) < 0.03:
@@ -185,7 +228,7 @@ class MainLayout(FloatLayout):
                              duration = 0.5, transition = AnimationTransition.in_out_sine)
             anim.start(self._recordBtn)
         
-    def delete_audio(self):
+    def hide_audio_ui(self):
         if self._playing:
             self._playing = False
             self._playBtn.background_normal = 'assets/play_normal.png'
@@ -219,6 +262,14 @@ class MainLayout(FloatLayout):
         anim2.start(self._confirmBtn)
         anim3.start(self._progressSlider)
         anim4.start(self._playBtn)
+        
+    def save_audio(self):
+        self.hide_audio_ui()
+        self.update_text()
+        
+    def delete_audio(self):
+        self.hide_audio_ui()
+        
         
     def play_audio(self):
         self._playing = not self._playing
