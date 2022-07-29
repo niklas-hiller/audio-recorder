@@ -9,7 +9,6 @@ from kivy.animation import Animation, AnimationTransition
 from kivy.uix.slider import Slider
 
 import hashlib
-import csv
 import json
 import pyaudio
 import numpy as np
@@ -23,6 +22,64 @@ def dB(rms):
     return 20 * np.log10(rms)
 
 
+
+# For Data Visualization (remove later)
+[
+    [
+        "filename",
+        [
+            [
+                # chunk 1
+            ],
+            [
+                # chunk 2
+            ],
+            [
+                # chunk n
+            ]
+        ]
+    ],
+    [
+        "filename",
+        [
+            [
+                # chunk 1
+            ],
+            [
+                # chunk 2
+            ],
+            [
+                # chunk n
+            ]
+        ]
+    ]
+]
+
+class AudioStream:
+    
+    def __init__(self):
+        self._chunks = []
+        
+    @property
+    def chunks(self) -> list[list[bytes]]:
+        return self._chunks
+    
+    def length(self):
+        return len(self.chunks)
+    
+    def __getitem__(self, index : int) -> list[bytes]:
+        return self.chunks[index]
+    
+    def append(self, chunk : list[bytes]):
+        self.chunks.append(chunk)
+
+    def to_numpy(self) -> np.ndarray:
+        return np.array([np.frombuffer(chunk, dtype = np.float32) for chunk in self.chunks], dtype = np.float32)
+
+    def to_numpyConcat(self) -> np.ndarray:
+        return np.concatenate([chunk for chunk in self.to_numpy()])
+
+
 class NO_MORE_TEXT(Exception):
     pass
 
@@ -32,9 +89,10 @@ class Data:
         self._current = -1
         with open(src, encoding='utf-8') as f:
             self._texts = json.load(f)
+        self._data = [None] * len(self._texts)
         
     @property
-    def current(self):
+    def current(self) -> str:
         return self._texts[self._current]
         
     def next(self):
@@ -42,11 +100,23 @@ class Data:
         self._current += 1
         return self._texts[self._current]
     
-    # def insert(self, data):
-    #     self._data[self._current] = data
-    #     
-    # def to_csv(self):
-    #     pass
+    def insert(self, data : AudioStream):
+        _data = data.to_numpy()
+        _hash = hashlib.md5(self.current.encode(encoding = 'utf-8')).digest()
+        self._data[self._current] = np.array([_hash, _data])
+        # Size of each chunk
+        # print(f"Size {[chunk.size for chunk in data]}")
+        # Equivalent to data.size
+        # print(f"SizeTotal {np.sum([chunk.size for chunk in data])}")
+        print(f"Recorded samples: {_data.size}")
+        # Combine all chunks to one array
+        # concat = np.concatenate([chunk for chunk in data])
+        
+        
+    def to_csv(self):
+        data = np.array(self._data)
+        print(data)
+        np.savetxt("data.csv", data, delimiter = ",")
 
 class MainLayout(FloatLayout):
     
@@ -164,6 +234,7 @@ class MainLayout(FloatLayout):
             self._recordText.text = self._data.next()
         except NO_MORE_TEXT as e:
             self._recordText.text = "Done"
+            self._data.to_csv()
         anim = Animation(opacity = 1.0)
         anim.start(self._recordText)
         
@@ -195,7 +266,7 @@ class MainLayout(FloatLayout):
     #     self.targetGlow = random.randint(100, 200) / 100
         
     def process_audio_input(self, in_data, frame_count, time_info, flag):
-        self.chunks.append(in_data)   
+        self.audioStream.append(in_data)
         audio_data = np.frombuffer(in_data, dtype = np.float32)
         
         db = float(dB(rms(audio_data)))
@@ -210,15 +281,15 @@ class MainLayout(FloatLayout):
     
     def process_audio_output(self, in_data, frame_count, time_info, flag):
         c = int(self._progressSlider.value)
-        if c + 1 < len(self.chunks):
+        if c + 1 < self.audioStream.length():
             self._progressSlider.value += 1
-            return self.chunks[c], pyaudio.paContinue
+            return self.audioStream[c], pyaudio.paContinue
         else:
             self._progressSlider.value += 1
             self._playBtn.background_normal = 'assets/play_normal.png'
             self._playBtn.background_down = 'assets/play_down.png'
             self._playing = False
-            return self.chunks[c], pyaudio.paComplete
+            return self.audioStream[c], pyaudio.paComplete
         
     def show_recordBtn(self, animation, widget):
         self.finishedAnim += 1
@@ -264,6 +335,7 @@ class MainLayout(FloatLayout):
         anim4.start(self._playBtn)
         
     def save_audio(self):
+        self._data.insert(self.audioStream)
         self.hide_audio_ui()
         self.update_text()
         
@@ -274,7 +346,7 @@ class MainLayout(FloatLayout):
     def play_audio(self):
         self._playing = not self._playing
         if self._playing:
-            if self._progressSlider.value >= len(self.chunks):
+            if self._progressSlider.value >= self.audioStream.length():
                 self._progressSlider.value = 0
             self._playBtn.background_normal = 'assets/pause_normal.png'
             self._playBtn.background_down = 'assets/pause_down.png'
@@ -300,10 +372,12 @@ class MainLayout(FloatLayout):
         # self.glowEvent = Clock.schedule_interval(lambda x : self.simulate_audio(), 0.1)
         self.minimum_db =  10000    # just some high value
         self.maximum_db = -10000    # just some small value
-        self.chunks = []
+        self.audioStream = AudioStream()
         
         self.pyaudio = pyaudio.PyAudio()
+        # sample_rate / 1024 = chunks per second
         sample_rate = int(self.pyaudio.get_default_input_device_info()['defaultSampleRate'])
+        print(f"Recording with {sample_rate}Hz")
         device = self.pyaudio.get_default_input_device_info()['index']
         self.stream = self.pyaudio.open(format = pyaudio.paFloat32,
                                         input_device_index = device,
@@ -344,7 +418,7 @@ class MainLayout(FloatLayout):
         self.stream.close()
         self.pyaudio.terminate()
         
-        self._progressSlider.max = len(self.chunks) - 1
+        self._progressSlider.max = self.audioStream.length() - 1
         self._progressSlider.value = 0
         
         self.targetGlow = 1.0
